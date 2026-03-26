@@ -62,12 +62,29 @@ export async function refreshToken(userId: string, currentRefreshToken: string) 
   }
 }
 
-export async function requestJira({ url, method = "GET", data, params }: { url: string; method?: string; data?: any; params?: any }) {
-  const session = await getSession();
-  if (!session) throw new JiraError("Unauthorized", 401);
+export async function requestJira({ 
+  url, 
+  method = "GET", 
+  data, 
+  params,
+  userAccountId 
+}: { 
+  url: string; 
+  method?: string; 
+  data?: any; 
+  params?: any;
+  userAccountId?: string;
+}) {
+  let targetAccountId = userAccountId;
+
+  if (!targetAccountId) {
+    const session = await getSession();
+    if (!session) throw new JiraError("Unauthorized", 401);
+    targetAccountId = session.userAccountId;
+  }
 
   await dbConnect();
-  const user = await User.findOne({ accountId: session.userAccountId });
+  const user = await User.findOne({ accountId: targetAccountId });
   if (!user) throw new JiraError("User not found", 404);
 
   // 1. Get cloudId
@@ -104,7 +121,10 @@ export async function requestJira({ url, method = "GET", data, params }: { url: 
   }
 }
 
-export async function fetchWithPagination<T>(url: string, options: { query?: string; params?: any } = {}): Promise<T[]> {
+export async function fetchWithPagination<T>(
+  url: string, 
+  options: { query?: string; params?: any; userAccountId?: string } = {}
+): Promise<T[]> {
   let allResults: T[] = [];
   let startAt = 0;
   const maxResults = 50;
@@ -113,6 +133,7 @@ export async function fetchWithPagination<T>(url: string, options: { query?: str
   while (!isLast) {
     const response = await requestJira({
       url,
+      userAccountId: options.userAccountId,
       params: {
         ...options.params,
         ...(options.query ? { query: options.query } : {}),

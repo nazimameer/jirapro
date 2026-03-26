@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export default async function LandingPage() {
   const user = await getCurrentUser();
+
+  if (user) {
+    redirect("/dashboard");
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0A0B] text-white overflow-hidden relative selection:bg-indigo-500/30">

@@ -1,6 +1,7 @@
 "use server";
 
 import { requestJira, fetchWithPagination, JiraError, limitConcurrency } from "@/lib/jira";
+import { getSession } from "@/lib/auth";
 import { unstable_cache } from "next/cache";
 import { IssueSchema } from "@/lib/validation";
 
@@ -18,34 +19,46 @@ async function handleAction<T>(action: () => Promise<T>) {
 
 export async function getProjects() {
   return handleAction(async () => {
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
+    const accountId = session.userAccountId;
+
     return unstable_cache(
-      async () => requestJira({ url: "project" }),
+      async (uid: string) => requestJira({ url: "project", userAccountId: uid }),
       ["projects"],
-      { revalidate: 3600 } 
-    )();
+      { revalidate: 3600, tags: [`projects-${accountId}`] } 
+    )(accountId);
   });
 }
 
 export async function getUsers(query?: string) {
   return handleAction(async () => {
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
+    const accountId = session.userAccountId;
+
     if (!query) {
       return unstable_cache(
-        async () => fetchWithPagination<any>("users/search"),
+        async (uid: string) => fetchWithPagination<any>("users/search", { userAccountId: uid }),
         ["users-base"],
-        { revalidate: 3600 }
-      )();
+        { revalidate: 3600, tags: [`users-${accountId}`] }
+      )(accountId);
     }
-    return fetchWithPagination<any>("users/search", { query });
+    return fetchWithPagination<any>("users/search", { query, userAccountId: accountId });
   });
 }
 
 export async function getStatuses() {
   return handleAction(async () => {
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
+    const accountId = session.userAccountId;
+
     return unstable_cache(
-      async () => requestJira({ url: "status" }),
+      async (uid: string) => requestJira({ url: "status", userAccountId: uid }),
       ["statuses"],
-      { revalidate: 3600 }
-    )();
+      { revalidate: 3600, tags: [`statuses-${accountId}`] }
+    )(accountId);
   });
 }
 

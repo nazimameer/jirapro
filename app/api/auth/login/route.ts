@@ -1,8 +1,13 @@
-import { getAtlassianAuthUrl } from "@/lib/auth";
+import { getAtlassianAuthUrl, getSession } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 
 export async function GET() {
   try {
+    const session = await getSession();
+    if (session) {
+      redirect("/dashboard");
+    }
     const url = await getAtlassianAuthUrl();
     return NextResponse.redirect(url);
   } catch (error) {
