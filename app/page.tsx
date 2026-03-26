@@ -22,6 +22,13 @@ export default async function LandingPage() {
             </div>
             <span className="font-black text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">JiraPro</span>
           </div>
+          
+          <div className="hidden md:flex items-center gap-8">
+            <Link href="/privacy" className="text-xs font-bold text-slate-400 hover:text-white uppercase tracking-widest transition-colors">Privacy</Link>
+            <Link href="/terms" className="text-xs font-bold text-slate-400 hover:text-white uppercase tracking-widest transition-colors">Terms</Link>
+            <Link href="/contact" className="text-xs font-bold text-slate-400 hover:text-white uppercase tracking-widest transition-colors">Contact</Link>
+          </div>
+
           <div>
             {user ? (
               <Link 
@@ -112,6 +119,29 @@ export default async function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-white/5 py-20">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-12">
+          <div className="flex flex-col items-center md:items-start space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-6 h-6 rounded bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <span className="font-black text-lg tracking-tight text-white/90">JiraPro</span>
+            </div>
+            <p className="text-slate-500 text-sm font-medium">© 2026 JiraPro Smart Workflow Engine.</p>
+          </div>
+          
+          <div className="flex gap-10 items-center">
+            <Link href="/privacy" className="text-xs font-bold text-slate-400 hover:text-white uppercase tracking-widest transition-colors">Privacy</Link>
+            <Link href="/terms" className="text-xs font-bold text-slate-400 hover:text-white uppercase tracking-widest transition-colors">Terms</Link>
+            <Link href="/contact" className="text-xs font-bold text-slate-400 hover:text-white uppercase tracking-widest transition-colors">Contact</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
