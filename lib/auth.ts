@@ -16,7 +16,7 @@ export async function getAtlassianAuthUrl() {
     scope: "read:me offline_access read:jira-work write:jira-work",
     redirect_uri: process.env.ATLASSIAN_CALLBACK_URL!,
     response_type: "code",
-    prompt: "consent",
+    prompt: "select_account",
     state: "random_state_string",
   });
 
@@ -43,6 +43,13 @@ export async function getAtlassianMe(accessToken: string) {
     },
   });
 
+  return response.data;
+}
+
+export async function getAccessibleResources(accessToken: string) {
+  const response = await axios.get("https://api.atlassian.com/oauth/token/accessible-resources", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   return response.data;
 }
 

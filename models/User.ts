@@ -41,6 +41,7 @@ const userSchema = new mongoose.Schema({
     set: (v: string) => encrypt(v),
     get: (v: string) => decrypt(v)
   },
+  cloudId: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 }, {

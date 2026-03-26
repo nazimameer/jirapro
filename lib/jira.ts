@@ -87,13 +87,22 @@ export async function requestJira({
   const user = await User.findOne({ accountId: targetAccountId });
   if (!user) throw new JiraError("User not found", 404);
 
-  // 1. Get cloudId
-  const cloudsResponse = await axios.get("https://api.atlassian.com/oauth/token/accessible-resources", {
-    headers: { Authorization: `Bearer ${user.accessToken}` },
-  });
+  // 1. Get cloudId (use cached if available)
+  let cloudId = user.cloudId;
   
-  const cloudId = cloudsResponse.data[0]?.id;
-  if (!cloudId) throw new JiraError("No accessible Jira resources found", 404);
+  if (!cloudId) {
+    console.log("Fetching accessible resources (first time cache)...");
+    const cloudsResponse = await axios.get("https://api.atlassian.com/oauth/token/accessible-resources", {
+      headers: { Authorization: `Bearer ${user.accessToken}` },
+    });
+    
+    cloudId = cloudsResponse.data[0]?.id;
+    if (!cloudId) throw new JiraError("No accessible Jira resources found", 404);
+    
+    // Save to user for future requests
+    user.cloudId = cloudId;
+    await user.save();
+  }
 
   const client = createJiraClient(cloudId, user.accessToken);
 

@@ -1,4 +1,4 @@
-import { exchangeCodeForToken, getAtlassianMe, createSession } from "@/lib/auth";
+import { exchangeCodeForToken, getAtlassianMe, createSession, getAccessibleResources } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
 import { NextRequest, NextResponse } from "next/server";
@@ -25,23 +25,26 @@ export async function GET(request: NextRequest) {
     // 2. Get user info from Atlassian
     const atlassianUser = await getAtlassianMe(tokens.access_token);
 
-    // 3. Upsert user in MongoDB
-    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
-    
+    // 3. Get accessible resources (to get cloudId)
+    const resources = await getAccessibleResources(tokens.access_token);
+    const cloudId = resources[0]?.id;
+
+    // 4. Upsert user in MongoDB
     const user = await User.findOneAndUpdate(
       { accountId: atlassianUser.account_id },
       {
         email: atlassianUser.email,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
+        cloudId: cloudId, // Cache the cloudId
       },
       { upsert: true, new: true }
     );
 
-    // 4. Create session
+    // 5. Create session
     await createSession(user.accountId);
 
-    // 5. Redirect to home or dashboard
+    // 6. Redirect to home or dashboard
     return NextResponse.redirect(new URL("/", request.url));
   } catch (err: any) {
     console.error("Auth callback error:", err);
