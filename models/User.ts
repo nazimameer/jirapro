@@ -55,7 +55,9 @@ const userSchema = new mongoose.Schema({
     set: (v: string) => encrypt(v),
     get: (v: string) => decrypt(v)
   },
-  cloudId: { type: String },
+  cloudId: { type: String, default: null },
+  lastBoardId: { type: String, default: null },
+  refresh_token: { type: String, default: null }, // alias or alternative form requested by user
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 }, {

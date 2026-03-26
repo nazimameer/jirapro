@@ -1,12 +1,20 @@
+export const dynamic = "force-dynamic";
+
 import { requireAuth } from "@/lib/auth";
 import { getProjects } from "@/actions/jira";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import ThemeWrapper from "@/components/ThemeWrapper";
 import Navbar from "@/components/Navbar";
 
 export default async function DashboardPage() {
   const user = await requireAuth();
   const { data, error } = await getProjects();
+  
+  if (error?.status === 403) {
+    redirect("/select-site");
+  }
+
   const projects = (data as any[]) || [];
 
   return (

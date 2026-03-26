@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback, memo } from "react";
-import { createSingleIssue } from "@/actions/jira";
+import { bulkCreateIssues, getBoardConfiguration } from "@/actions/jira";
 import { saveTemplate, deleteTemplate } from "@/actions/templates";
 import { useRouter } from "next/navigation";
 
@@ -73,7 +73,7 @@ const TaskRow = memo(({
   onDuplicate,
   inputRef 
 }: { 
-  task: { summary: string, description: string }, 
+  task: { summary: string, description: string, status?: 'success' | 'failed', error?: string, issueKey?: string }, 
   index: number, 
   onUpdate: (index: number, field: string, value: string) => void,
   onRemove: (index: number) => void,
@@ -81,7 +81,15 @@ const TaskRow = memo(({
   inputRef: (el: HTMLInputElement | null) => void
 }) => {
   return (
-    <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-md relative group hover:bg-white/[0.08] hover:border-indigo-500/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(99,102,241,0.05)]">
+    <div className={`bg-white/5 p-8 rounded-[2rem] border ${task.status === 'success' ? 'border-green-500/50' : task.status === 'failed' ? 'border-red-500/50' : 'border-white/10'} backdrop-blur-md relative group hover:bg-white/[0.08] hover:border-indigo-500/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(99,102,241,0.05)]`}>
+      <div className="absolute top-6 right-20 flex items-center gap-2">
+        {task.status === 'success' && (
+          <span className="text-green-400 text-xs font-bold bg-green-400/10 px-3 py-1.5 rounded-xl border border-green-400/20">Success ({task.issueKey})</span>
+        )}
+        {task.status === 'failed' && (
+          <span className="text-red-400 text-xs font-bold bg-red-400/10 px-3 py-1.5 rounded-xl border border-red-400/20 truncate max-w-[150px] md:max-w-xs" title={task.error}>{task.error || "Failed"}</span>
+        )}
+      </div>
       <div className="absolute top-6 right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
         <button 
           type="button"
@@ -114,13 +122,14 @@ const TaskRow = memo(({
             </span>
           </div>
           <div className="flex-1">
-             <input 
+              <input 
               type="text"
               ref={inputRef}
               value={task.summary}
               onChange={(e) => onUpdate(index, "summary", e.target.value)}
+              disabled={task.status === 'success'}
               placeholder="Task summary..."
-              className="w-full text-xl font-black text-white placeholder:text-slate-600 border-b-2 border-transparent focus:border-indigo-500 outline-none transition-all pb-1 bg-transparent"
+              className="w-full text-xl font-black text-white placeholder:text-slate-600 border-b-2 border-transparent focus:border-indigo-500 outline-none transition-all pb-1 bg-transparent disabled:opacity-50"
               required
             />
           </div>
@@ -129,8 +138,9 @@ const TaskRow = memo(({
           <textarea 
             value={task.description}
             onChange={(e) => onUpdate(index, "description", e.target.value)}
+            disabled={task.status === 'success'}
             placeholder="Describe the mission details (optional)..."
-            className="w-full p-5 text-sm font-medium text-slate-400 bg-white/5 border border-white/5 rounded-2xl focus:ring-1 focus:ring-indigo-500/50 focus:bg-white/10 outline-none h-28 transition-all resize-none shadow-inner"
+            className="w-full p-5 text-sm font-medium text-slate-400 bg-white/5 border border-white/5 rounded-2xl focus:ring-1 focus:ring-indigo-500/50 focus:bg-white/10 outline-none h-28 transition-all resize-none shadow-inner disabled:opacity-50"
           />
         </div>
       </div>
@@ -145,9 +155,10 @@ interface BulkCreateFormProps {
   users: any[];
   statuses: any[];
   initialTemplates: any[];
+  boards: any[];
 }
 
-export default function BulkCreateForm({ projects, users, statuses, initialTemplates }: BulkCreateFormProps) {
+export default function BulkCreateForm({ projects, users, statuses, initialTemplates, boards }: BulkCreateFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,14 +179,23 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
     project: projects[0]?.key || "",
     assignee: "",
     issueType: "Task",
-    targetStatus: ""
+    boardId: ""
   });
 
-  const [tasks, setTasks] = useState([
+  const selectedBoardForUI = boards.find(b => String(b.id) === commonFields.boardId);
+  const inferredProjectKeyFromBoard = selectedBoardForUI?.location?.projectKey ?? "";
+
+  const [boardFallbackReason, setBoardFallbackReason] = useState<string | null>(null);
+  const [selectedColumnStatusIds, setSelectedColumnStatusIds] = useState<string[]>([]);
+
+  const [tasks, setTasks] = useState<{ summary: string, description: string, status?: 'success' | 'failed', error?: string, issueKey?: string }[]>([
     { summary: "", description: "" }
   ]);
 
   const [availableStatuses, setAvailableStatuses] = useState<any[]>([]);
+  const [boardColumns, setBoardColumns] = useState<any[]>([]);
+  const [selectedColumnName, setSelectedColumnName] = useState("");
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
 
   // Filter statuses based on selected project
   useEffect(() => {
@@ -183,6 +203,60 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
       setAvailableStatuses(statuses);
     }
   }, [commonFields.project, statuses]);
+
+  // Handle automatic project mapping when a board is selected
+  useEffect(() => {
+    async function handleBoardChange() {
+      if (commonFields.boardId) {
+        try {
+          setIsLoadingConfig(true);
+          setBoardFallbackReason(null);
+          setSelectedColumnName("");
+          setSelectedColumnStatusIds([]);
+          const selectedBoard = boards.find(b => String(b.id) === commonFields.boardId);
+          if (selectedBoard?.location?.projectKey) {
+            setCommonFields(prev => ({
+              ...prev,
+              project: selectedBoard.location.projectKey
+            }));
+          } else {
+            setBoardFallbackReason("Selected board has no mapped project. Using project fallback.");
+          }
+
+          const configResult = await getBoardConfiguration(commonFields.boardId);
+          if (configResult.error) {
+            setBoardColumns([]);
+            setSelectedColumnName("");
+            setSelectedColumnStatusIds([]);
+            setBoardFallbackReason("Board configuration unavailable. Using project fallback.");
+            return;
+          }
+          if (configResult.data?.columnConfig?.columns) {
+            setBoardColumns(configResult.data.columnConfig.columns);
+          } else {
+            setBoardColumns([]);
+            setSelectedColumnName("");
+            setSelectedColumnStatusIds([]);
+            setBoardFallbackReason("No board columns available. Using project fallback.");
+          }
+        } catch (e) {
+          console.error("Board configuration load failed:", e);
+          setBoardColumns([]);
+          setSelectedColumnName("");
+          setSelectedColumnStatusIds([]);
+          setBoardFallbackReason("Board API failed. Using project fallback.");
+        } finally {
+          setIsLoadingConfig(false);
+        }
+      } else {
+        setBoardColumns([]);
+        setSelectedColumnName("");
+        setSelectedColumnStatusIds([]);
+        setBoardFallbackReason(boards.length === 0 ? "No boards available. Using project fallback." : null);
+      }
+    }
+    handleBoardChange();
+  }, [commonFields.boardId, boards]);
 
   const taskRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -237,7 +311,7 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
         project: template.projectKey,
         assignee: template.assigneeId || "",
         issueType: template.issueType,
-        targetStatus: template.targetStatus || ""
+        boardId: ""
       });
       setTasks(template.tasks.map((t: any) => ({ 
         summary: t.summary, 
@@ -261,7 +335,7 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
       projectKey: commonFields.project,
       issueType: commonFields.issueType,
       assigneeId: commonFields.assignee,
-      targetStatus: commonFields.targetStatus,
+      targetStatus: undefined,
       tasks: validTasks
     });
 
@@ -318,9 +392,27 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
   };
 
   const handleSubmit = async () => {
-    const validTasks = tasks.filter(t => t.summary.trim());
+    const validTasks = tasks.map((t, i) => ({ ...t, originalIndex: i }))
+                            .filter(t => t.summary.trim() && t.status !== 'success');
+    
     if (validTasks.length === 0) {
-      setToast({ message: "Please add at least one task", type: "error" });
+      setToast({ message: "No pending tasks to create", type: "error" });
+      return;
+    }
+
+    if (!commonFields.boardId) {
+      setError("Please select an Agile board first.");
+      setToast({ message: "Select a board to continue", type: "error" });
+      return;
+    }
+    if (!inferredProjectKeyFromBoard) {
+      setError("Selected board is missing project mapping. Please choose a different board.");
+      setToast({ message: "Board is missing project mapping", type: "error" });
+      return;
+    }
+    if (!selectedColumnName || selectedColumnStatusIds.length === 0) {
+      setError("Please select a board column to place issues into.");
+      setToast({ message: "Select a column to continue", type: "error" });
       return;
     }
 
@@ -329,58 +421,97 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
     setError(null);
     setSuccess(null);
     setProgress({ current: 0, total: validTasks.length });
-
-    const results = [];
-    let successCount = 0;
-
-    for (let i = 0; i < validTasks.length; i++) {
-      const task = validTasks[i];
-      const payload = {
-        fields: {
-          project: { key: commonFields.project },
-          summary: task.summary.trim(),
-          description: {
-            type: "doc",
-            version: 1,
-            content: [
-              {
-                type: "paragraph",
-                content: [{ type: "text", text: task.description.trim() || "No description provided." }]
-              }
-            ]
-          },
-          issuetype: { name: commonFields.issueType },
-          ...(commonFields.assignee ? { assignee: { accountId: commonFields.assignee } } : {})
-        }
-      };
-
-      const result = await createSingleIssue(payload, commonFields.targetStatus);
-      
-      if (result.error) {
-        console.error(`Failed at task ${i + 1}:`, result.error);
-        // We'll continue with others but track the error
-      } else {
-        successCount++;
+    
+    const issuesToCreate = validTasks.map((task) => ({
+      fields: {
+        project: { key: commonFields.project },
+        summary: task.summary.trim(),
+        description: {
+          type: "doc",
+          version: 1,
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: task.description.trim() || "No description provided." }]
+            }
+          ]
+        },
+        issuetype: { name: commonFields.issueType },
+        ...(commonFields.assignee ? { assignee: { accountId: commonFields.assignee } } : {})
       }
-      
-      setProgress(prev => ({ ...prev, current: i + 1 }));
+    }));
+
+    const result = await bulkCreateIssues(issuesToCreate, {
+      targetStatusIds: selectedColumnStatusIds
+    });
+
+    if (result.error || !result.data) {
+      const status = (result.error as any)?.status;
+      if (status === 401 || status === 403) {
+        setError("Permission error: you may not have access to create or transition issues in this project.");
+      } else if (status === 404) {
+        setError("Board or project data was not found. Falling back to project mode may help.");
+      } else {
+        setError(result.error?.message || "Bulk creation failed");
+      }
+      setToast({ message: "Bulk creation failed", type: "error" });
+      setLoading(false);
+      return;
     }
 
-    if (successCount === validTasks.length) {
-      setSuccess(`Successfully created all ${validTasks.length} tasks!`);
-      setToast({ message: `Successfully created ${validTasks.length} tasks!`, type: "success" });
+    const { results, summary } = result.data;
+    setTasks((prev) => {
+      const next = [...prev];
+      results.forEach((taskResult: any) => {
+        const sourceTask = validTasks[taskResult.index];
+        if (!sourceTask) return;
+
+        const index = sourceTask.originalIndex;
+        if (taskResult.success) {
+          next[index] = {
+            ...next[index],
+            status: "success",
+            issueKey: taskResult.issueKey,
+            error: undefined
+          };
+        } else {
+          next[index] = {
+            ...next[index],
+            status: "failed",
+            error: taskResult.error || "Failed after retries"
+          };
+        }
+      });
+      return next;
+    });
+
+    setProgress({ current: summary.total, total: summary.total });
+
+    if (summary.successful === summary.total) {
+      setSuccess(
+        summary.retried > 0
+          ? `Successfully created all ${summary.total} tasks (${summary.retried} retried${summary.transitionFailed ? `, ${summary.transitionFailed} kept in default status` : ""}).`
+          : `Successfully created all ${summary.total} tasks.`
+      );
+      setToast({ message: `Created ${summary.total}/${summary.total} tasks`, type: "success" });
       setTasks([{ summary: "", description: "" }]);
-    } else if (successCount > 0) {
-      setSuccess(`Created ${successCount} tasks, but ${validTasks.length - successCount} failed.`);
-      setToast({ message: `Partial success: ${successCount}/${validTasks.length} created`, type: "error" });
+    } else if (summary.successful > 0) {
+      setSuccess(
+        `Created ${summary.successful}/${summary.total} tasks (${summary.failed} failed, ${summary.retried} retried${summary.transitionFailed ? `, ${summary.transitionFailed} kept in default status` : ""}).`
+      );
+      setToast({ message: `Partial success: ${summary.successful}/${summary.total}`, type: "error" });
     } else {
-      setError("Failed to create any issues. Please check your Jira permissions.");
+      setError("Failed to create any issues. Please check your Jira permissions or retry.");
       setToast({ message: "Bulk creation failed", type: "error" });
     }
     
     setLoading(false);
-    setProgress({ current: 0, total: 0 });
   };
+
+  const pendingTasksCount = tasks.filter(t => t.summary.trim() && t.status !== 'success').length;
+  const boardMissingForPhaseC = !commonFields.boardId || !inferredProjectKeyFromBoard;
+  const columnMissing = !selectedColumnName || selectedColumnStatusIds.length === 0;
+  const projectForMessage = inferredProjectKeyFromBoard || commonFields.project || "selected project";
 
   return (
     <div className="space-y-8">
@@ -441,18 +572,43 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
           <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
           Global Mission Configuration
         </h2>
+        {boardFallbackReason && (
+          <div className="px-5 py-3 bg-amber-500/10 text-amber-300 rounded-2xl border border-amber-500/20 text-xs font-bold tracking-wide">
+            {boardFallbackReason}
+          </div>
+        )}
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-8">
           <div className="space-y-3">
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Target Project</label>
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Project (from board)</label>
+            <div className="w-full px-5 py-3.5 bg-white/5 border border-white/10 rounded-2xl font-bold text-white truncate">
+              {inferredProjectKeyFromBoard || "Select a board"}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Agile Board (Optional)</label>
             <div className="relative group/select">
               <select 
-                value={commonFields.project}
-                onChange={(e) => setCommonFields({...commonFields, project: e.target.value})}
+                value={commonFields.boardId}
+                onChange={(e) => {
+                  const bid = e.target.value;
+                  const selectedBoard = boards.find(b => String(b.id) === bid);
+                  setBoardFallbackReason(null);
+                  setCommonFields(prev => ({
+                    ...prev,
+                    boardId: bid,
+                    project: selectedBoard?.location?.projectKey ?? prev.project
+                  }));
+                }}
                 className="w-full pl-5 pr-10 py-3.5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all font-bold text-white appearance-none cursor-pointer hover:bg-white/10"
-                required
               >
-                {projects.map(p => <option key={p.id} value={p.key} className="bg-[#0A0A0B]">{p.name} ({p.key})</option>)}
+                <option value="" className="bg-[#0A0A0B]">-- Select Board --</option>
+                {boards.map(b => (
+                  <option key={b.id} value={b.id} className="bg-[#0A0A0B]">
+                    {b.name} ({b.type.toUpperCase()})
+                  </option>
+                ))}
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 group-hover/select:text-indigo-400 transition-colors">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
@@ -497,21 +653,35 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
           </div>
 
           <div className="space-y-3">
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Auto-Transition To</label>
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Board Column (Required)</label>
             <div className="relative group/select">
               <select 
-                value={commonFields.targetStatus}
-                onChange={(e) => setCommonFields({...commonFields, targetStatus: e.target.value})}
-                className="w-full pl-5 pr-10 py-3.5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all font-bold text-white appearance-none cursor-pointer hover:bg-white/10"
+                value={selectedColumnName}
+                onChange={(e) => {
+                  const colName = e.target.value;
+                  setSelectedColumnName(colName);
+                  const col = boardColumns.find(c => c.name === colName);
+                  const ids = Array.isArray(col?.statuses) ? col.statuses.map((s: any) => String(s.id)) : [];
+                  setSelectedColumnStatusIds(ids);
+                }}
+                disabled={isLoadingConfig || boardColumns.length === 0}
+                className="w-full pl-5 pr-10 py-3.5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all font-bold text-white appearance-none cursor-pointer hover:bg-white/10 disabled:opacity-30"
               >
-                <option value="" className="bg-[#0A0A0B]">No Transition</option>
-                {Array.from(new Set(availableStatuses.map(s => s.name))).map((name: any) => (
-                  <option key={name} value={name} className="bg-[#0A0A0B]">{name}</option>
+                <option value="" className="bg-[#0A0A0B]">{isLoadingConfig ? "Loading Columns..." : "-- Select Column --"}</option>
+                {boardColumns.map(c => (
+                  <option key={c.name} value={c.name} className="bg-[#0A0A0B]">{c.name}</option>
                 ))}
               </select>
               <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 group-hover/select:text-indigo-400 transition-colors">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Placement</label>
+            <div className="w-full px-5 py-3.5 bg-white/5 border border-white/10 rounded-2xl font-bold text-white truncate">
+              {selectedColumnName ? `Column: ${selectedColumnName}` : "Select a column"}
             </div>
           </div>
         </div>
@@ -621,9 +791,9 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
           </div>
         )}
         
-        <button 
-          onClick={() => setShowConfirm(true)}
-          disabled={loading || tasks.filter(t => t.summary.trim()).length === 0}
+          <button 
+            onClick={() => setShowConfirm(true)}
+            disabled={loading || pendingTasksCount === 0 || boardMissingForPhaseC || columnMissing}
           className="relative group p-[2px] rounded-[2rem] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-fuchsia-500 to-indigo-500 rounded-[2rem] opacity-70 blur-md group-hover:opacity-100 transition-opacity animate-gradient-x" />
@@ -638,8 +808,16 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
                 Processing...
               </span>
             ) : (
-            <span className="flex items-center gap-3">
-              Apply {tasks.filter(t => t.summary.trim()).length} Issues
+            <span className="flex items-center gap-3 font-black text-xl uppercase tracking-widest text-white">
+              {boardMissingForPhaseC ? (
+                "Select a board"
+              ) : columnMissing ? (
+                "Select a column"
+              ) : tasks.some(t => t.status === 'failed') ? (
+                `Retry ${pendingTasksCount} Issues`
+              ) : (
+                `Apply ${pendingTasksCount} Issues`
+              )}
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
@@ -664,7 +842,7 @@ export default function BulkCreateForm({ projects, users, statuses, initialTempl
         onConfirm={handleSubmit}
         onCancel={() => setShowConfirm(false)}
         title="Confirm Bulk Action"
-        message={`You are about to create ${tasks.filter(t => t.summary.trim()).length} new issues in project ${commonFields.project}. This action will be processed individually and may take a moment.`}
+        message={`You are about to create ${tasks.filter(t => t.summary.trim()).length} new issues in project ${projectForMessage}. This action will be processed individually and may take a moment.`}
         count={tasks.filter(t => t.summary.trim()).length}
       />
     </div>
