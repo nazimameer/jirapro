@@ -32,11 +32,8 @@ export async function GET(request: NextRequest) {
       { accountId: atlassianUser.account_id },
       {
         email: atlassianUser.email,
-        tokens: {
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          expiresAt: expiresAt,
-        },
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
       },
       { upsert: true, new: true }
     );
