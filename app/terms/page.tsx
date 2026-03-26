@@ -1,57 +1,50 @@
-import Link from "next/link";
+import ThemeWrapper from "@/components/ThemeWrapper";
+import Navbar from "@/components/Navbar";
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-[#0A0A0B] text-white selection:bg-indigo-500/30 overflow-hidden relative">
-      <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-fuchsia-600/10 blur-[120px] pointer-events-none" />
+    <ThemeWrapper>
+      <Navbar />
       
-      <nav className="border-b border-white/5 bg-black/10 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center transition-transform group-hover:scale-110">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <span className="font-black text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">JiraPro</span>
-          </Link>
-          <Link href="/" className="text-sm font-bold text-slate-400 hover:text-white transition-colors">Back to Home</Link>
-        </div>
-      </nav>
-
-      <main className="max-w-3xl mx-auto px-6 py-20 relative">
-        <h1 className="text-4xl md:text-5xl font-black mb-12 tracking-tight">Terms of Service</h1>
+      <main className="max-w-3xl mx-auto px-6 py-40 relative">
+        <h1 className="text-5xl md:text-6xl font-black mb-16 tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/40">
+          Terms of Service
+        </h1>
         
-        <div className="space-y-12 text-slate-400 leading-relaxed">
-          <section>
-            <h2 className="text-xl font-bold text-white mb-4 italic">01. Acceptance of Terms</h2>
-            <p>
-              By accessing JiraPro, you agree to be bound by these terms. Our service is provided "as is" and we are not liable for any issues arising from interactions with official Atlassian APIs.
+        <div className="space-y-16 text-slate-400 leading-relaxed font-medium">
+          <section className="group">
+            <h2 className="text-xs font-black text-indigo-400 mb-4 uppercase tracking-[0.3em] flex items-center gap-3">
+              <span className="w-8 h-[1px] bg-indigo-500/30 group-hover:w-12 transition-all" />
+              01. Agreement to Terms
+            </h2>
+            <div className="bg-white/5 p-8 rounded-3xl border border-white/5 backdrop-blur-md">
+              <p className="text-lg">
+                By accessing Jira Pro, you agree to be bound by these terms. If you disagree with any part of the terms, you may not access our automation suite.
+              </p>
+            </div>
+          </section>
+
+          <section className="group">
+            <h2 className="text-xs font-black text-fuchsia-400 mb-4 uppercase tracking-[0.3em] flex items-center gap-3">
+              <span className="w-8 h-[1px] bg-fuchsia-500/30 group-hover:w-12 transition-all" />
+              02. Use License
+            </h2>
+            <p className="text-lg">
+              Permission is granted to use Jira Pro for personal or commercial Jira automation. This is the grant of a license, not a transfer of title.
             </p>
           </section>
 
-          <section>
-            <h2 className="text-xl font-bold text-white mb-4 italic">02. Authorized Use</h2>
-            <p>
-              You must be an authorized Jira user to use this application. You are responsible for ensuring your use of this tool complies with your organization's IT policies and Jira permissions.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-white mb-4 italic">03. Automated Actions</h2>
-            <p>
-              This tool performs bulk actions. You acknowledge that creating a large number of issues may trigger Jira rate limits or notification spikes. Use responsibly.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-white mb-4 italic">04. Termination</h2>
-            <p>
-              We reserve the right to suspend access to the service if any misuse or security threat is detected.
+          <section className="group">
+            <h2 className="text-xs font-black text-emerald-400 mb-4 uppercase tracking-[0.3em] flex items-center gap-3">
+              <span className="w-8 h-[1px] bg-emerald-500/30 group-hover:w-12 transition-all" />
+              03. Service Limitations
+            </h2>
+            <p className="text-lg">
+              Jira Pro is provided "as is". We make no warranties, expressed or implied, and hereby disclaim all other warranties including, without limitation, implied warranties or conditions of merchantability.
             </p>
           </section>
         </div>
       </main>
-    </div>
+    </ThemeWrapper>
   );
 }
