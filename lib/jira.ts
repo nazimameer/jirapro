@@ -16,7 +16,7 @@ export class JiraError extends Error {
 
 declare global {
   // eslint-disable-next-line no-var
-  var jiraTokenRefreshLocks: Record<string, Promise<string>> | undefined;
+  var jiraTokenRefreshLocks: Record<string, Promise<string> | undefined> | undefined;
 }
 
 function getJiraTokenRefreshLocks() {

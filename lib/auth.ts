@@ -11,7 +11,7 @@ const ATLASSIAN_TOKEN_URL = "https://auth.atlassian.com/oauth/token";
 
 declare global {
   // eslint-disable-next-line no-var
-  var atlassianTokenRefreshLocks: Record<string, Promise<string>> | undefined;
+  var atlassianTokenRefreshLocks: Record<string, Promise<string> | undefined> | undefined;
 }
 
 function getAtlassianTokenRefreshLocks() {
