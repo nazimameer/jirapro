@@ -104,7 +104,13 @@ export async function requestJira({
     await user.save();
   }
 
-  const client = createJiraClient(cloudId, user.accessToken);
+  const accessToken = user.accessToken;
+  // Masked check for invalid characters (CR/LF)
+  if (/[\r\n]/.test(accessToken)) {
+    console.error("CRITICAL: Access token contains invalid characters (newline/return)");
+  }
+
+  const client = createJiraClient(cloudId, accessToken);
 
   try {
     const response = await client.request({ url, method, data, params });

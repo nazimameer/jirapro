@@ -14,15 +14,17 @@ function encrypt(text: string) {
 
 function decrypt(text: string) {
   try {
+    if (!text.includes(":")) return text; // Migration fallback
     const textParts = text.split(":");
     const iv = Buffer.from(textParts.shift()!, "hex");
     const encryptedText = Buffer.from(textParts.join(":"), "hex");
     const decipher = crypto.createCipheriv("aes-256-cbc", Buffer.from(ENCRYPTION_KEY), iv);
     let decrypted = decipher.update(encryptedText);
     decrypted = Buffer.concat([decrypted, decipher.final()]);
-    return decrypted.toString();
+    return decrypted.toString().trim(); // Ensure no whitespace/newlines
   } catch (e) {
-    return text; // Fallback for unencrypted tokens (migration)
+    console.error("Decryption failed for token:", e);
+    return text;
   }
 }
 
